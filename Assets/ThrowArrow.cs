@@ -14,13 +14,12 @@ namespace RSUnityToolkit
         private PXCMPoint3DF32 lastFramesLocation; // to be filled with the first frames location
         private Vector3 speed; // Updates the speed of the dart 
         private float velocity;
-        RaycastHit hit;
-        public float speed2; 
-        public Transform Effect;
+        RaycastHit hit;   
         private float FFTime;
         private PXCMHandModule handAnalyzer;
         public Rigidbody Dart;
-        public Rigidbody ToClone; 
+        public Rigidbody CloneDart; 
+        public int toThrow = 0; 
       
         // Use this for initialization
         void Start()
@@ -142,7 +141,7 @@ namespace RSUnityToolkit
                         Vector3 temp = new Vector3((lastFramesLocation.x - location.x) * speed.x, (lastFramesLocation.y - location.y) * -1 * speed.y, (lastFramesLocation.z - location.z) * speed.z);
                         float Distance = (location.z - lastFramesLocation.z);
                      //   Debug.Log("Distance Traveled : " + Distance);
-                        velocity = Math.Abs(Distance / .02f) ;
+                        velocity = Math.Abs(Distance / .02f);
                         
                        Debug.Log("Velocity: " + velocity);
            
@@ -158,8 +157,22 @@ namespace RSUnityToolkit
                         {
                             //  Dart.useGravity = true ;
                             //Debug.Log("Hand Open!!");
-                            Instantiate(ToClone,location, Quaternion.identity);
-                            ToClone.AddForce(transform.up * ((velocity* 15)));
+                     
+                         
+                            
+                           if(toThrow < 1)
+                            {
+
+                                GameObject Clone = Instantiate(myObj, location, transform.rotation) as GameObject;
+                                CloneDart = Clone.GetComponent<Rigidbody>();
+                                CloneDart.transform.position = myObj.transform.position; 
+                                CloneDart.AddForce(transform.up * ((velocity*90)));
+
+                                toThrow = toThrow + 1; 
+
+                          }
+
+
 
 
                             /*     Vector3 fwd = transform.TransformDirection(Vector3.forward);
@@ -186,6 +199,7 @@ namespace RSUnityToolkit
                         else
                         {
                             myObj.transform.position += temp;
+
                             lastFramesLocation = location;
                         }
                     }
@@ -201,7 +215,10 @@ namespace RSUnityToolkit
               }
             void OnCollisionEnter(Collision collision)
              {
-                 ToClone.velocity = Vector3.zero;
+                 Physics.IgnoreCollision(Dart.GetComponent<Collider>(), CloneDart.GetComponent<Collider>());
+                   Dart.velocity = Vector3.zero;
+                     toThrow = 0;
+                  
              }
    }
  }
