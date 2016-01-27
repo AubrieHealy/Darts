@@ -77,6 +77,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Assets\CloningAndScoring.cs" />
     <Compile Include="Assets\ThrowArrow.cs" />
   </ItemGroup>
   <ItemGroup>
