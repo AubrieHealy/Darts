@@ -3,14 +3,21 @@ using System.Collections;
 
 public class CloningAndScoring : MonoBehaviour {
 
-    public int toThrow; 
-	// Use this for initialization
-	void Start () {
+    public Rigidbody ThrowingForce; 
+    public int toThrow;
+    private RigidbodyConstraints previousConstraints;
+    private RigidbodyConstraints freeze;
+    // Use this for initialization
+    void Start () {
+
+       // previousConstraints = RigidbodyConstraints.None;
+      //  freeze = RigidbodyConstraints.FreezePositionX | RigidbodyConstraints.FreezePositionY;
         toThrow = 0; 
 	}
 	
 	// Update is called once per frame
 	void Update () {
+       // Debug.Log("Velocity of RigidBody: " + ThrowingForce.velocity.z); 
 	
 	}
 
@@ -18,43 +25,78 @@ public class CloningAndScoring : MonoBehaviour {
 
     {
         //    new Vector3 ClonePos = Vector3(myObj.transform.position; )
-        if (toThrow < 1)
-        {
+    //    if (toThrow < 1)
+    //    {
 
-            GameObject Clone = Instantiate(gameObject, gameObject.transform.position, transform.rotation) as GameObject;
-     //Instantiate(gameObject, gameObject.transform.position, transform.rotation) as GameObject;
-            Rigidbody CloneDart = Clone.GetComponent<Rigidbody>();
+           ThrowingForce =  gameObject.GetComponent<Rigidbody>();
 
             //CloneDart.GetComponent<Collider>();
-
-
+            //GameObject Clone = Instantiate(gameObject, gameObject.transform.position, transform.rotation) as GameObject;
+            //Instantiate(gameObject, gameObject.transform.position, transform.rotation) as GameObject;
             //Physics.IgnoreCollision(Dart.GetComponent<Collider>(), Clone.GetComponent<Collider>());
-            //    toThrow = toThrow - 1;
-            CloneDart.transform.position = gameObject.transform.position;
-            CloneDart.AddForce(transform.up * ((velocity * 90)));
-         //   Physics.IgnoreCollision(Clone.GetComponent<Collider>(), GetComponent<Collider>());
+            //    toThrow = toThrow - 1;dd
+            //  gameObject.transform.position = gameObject.transform.position;
+            //   Physics.IgnoreCollision(Clone.GetComponent<Collider>(), GetComponent<Collider>());
+            ThrowingForce.AddForce(transform.up * ((velocity)));
+
+         //   freeze = RigidbodyConstraints.FreezePositionX | RigidbodyConstraints.FreezePositionY;
 
 
-            toThrow = toThrow + 1;
+
+            toThrow = 1;
 
 
-        }
+     //   }
 
     }
 
     void OnCollisionEnter(Collision other)
     {
+        if (other.gameObject.tag == "Environment")
+        {
         
-        // Dart.velocity = Vector3.zero;
-        if(other.gameObject.tag == "Environment")
-        { 
-            Debug.Log("Tothrow: " + toThrow);
+            ThrowingForce.velocity = Vector3.zero;
+           
+            toThrow = 0;
+       
 
-            toThrow = toThrow - 2;
-            Destroy(this.gameObject);  
+            gameObject.transform.position = new Vector3(0.678f, 8.5f, -11.89f);
+       
+        }
+
+        if (other.gameObject.tag == "Center")
+        {
+            ThrowingForce.velocity = Vector3.zero;
+            Debug.Log("YOU HIT THE CENTER!");
+            toThrow = 0;
+            gameObject.transform.position = new Vector3(0.678f, 8.5f, -11.89f);
+        }
+
+        if(other.gameObject.tag == "OuterCollider" )
+        {
+            ThrowingForce.velocity = Vector3.zero;
+            Debug.Log("YOU HIT THE OUTTER!");
+            toThrow = 0;
+            gameObject.transform.position = new Vector3(0.678f, 8.5f, -11.89f);
+        }
+
+        if (other.gameObject.tag == "OuterInnerCollider")
+        {
+            ThrowingForce.velocity = Vector3.zero;
+            Debug.Log("YOU HIT THE INNER OUTTER!");
+            toThrow = 0;
+            gameObject.transform.position = new Vector3(0.678f, 8.5f, -11.89f);
+        }
+
+        if (other.gameObject.tag == "InnerCollider")
+        {
+            ThrowingForce.velocity = Vector3.zero;
+            Debug.Log("YOU HIT THE INNER !");
+            toThrow = 0;
+            gameObject.transform.position = new Vector3(0.678f, 8.5f, -11.89f);
         }
 
 
     }
-
+ 
 }

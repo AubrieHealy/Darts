@@ -17,8 +17,9 @@ namespace RSUnityToolkit
         RaycastHit hit;
         private float FFTime;
         private PXCMHandModule handAnalyzer;
-      //  public Rigidbody Dart;
-       // public Rigidbody CloneDart;
+        private RigidbodyConstraints freeze;
+      
+      // public Rigidbody CloneDart;
         public int toThrow = 0;
 
         // Use this for initialization
@@ -151,26 +152,41 @@ namespace RSUnityToolkit
 
                         Vector3 temp = new Vector3((lastFramesLocation.x - location.x) * speed.x, (lastFramesLocation.y - location.y) * -1 * speed.y, (lastFramesLocation.z - location.z) * speed.z);
                         float Distance = (location.z - lastFramesLocation.z);
-                        //   Debug.Log("Distance Traveled : " + Distance);
-                        velocity = Math.Abs(Distance / .02f);
+                   //     Debug.Log("location: " + location.z); 
 
-                       Debug.Log("Velocity: " + velocity);
+                        velocity = Math.Abs(((Distance / .02f) * 60 ));
+                      // Debug.Log("Velocity: " + velocity);
 
-
-
-
-
-
-
-                        //     IhandData = IHAND.QueryOpenness();
-                        //if (IhandData > 80)
-                        if (velocity > 1)
+                        if (Math.Abs(lastFramesLocation.z - location.z) < 0.03)
                         {
-                            myObj.GetComponent<CloningAndScoring>().Cloning(velocity);
 
-                            // Cloning(); 
-                            //  Dart.useGravity = true ;
-                            //Debug.Log("Hand Open!!");
+                            velocity = 0;
+                          //  Debug.Log(Math.Abs(lastFramesLocation.z - location.z));
+                        }
+
+                        //   Debug.Log("Distance Traveled : " + Distance);
+
+
+                        
+
+
+
+
+
+
+                             IhandData = IHAND.QueryOpenness();
+                        //if (IhandData > 80)
+                        if (velocity < 100 && myObj.transform.position.z < -11)
+                        {
+
+                            freeze = RigidbodyConstraints.None;
+                            myObj.transform.position += temp;
+                            lastFramesLocation = location;
+
+                            //  Debug.Log("Velocity: " + velocity);
+
+
+                            //  freeze = RigidbodyConstraints.FreezePositionX | RigidbodyConstraints.FreezePositionY;
 
 
                             /*
@@ -194,28 +210,34 @@ namespace RSUnityToolkit
 
                                                          }
 
-                                                    */
+                                                  
 
 
-                            /*     Vector3 fwd = transform.TransformDirection(Vector3.forward);
-                                  Ray ray = new Ray(transform.position, Vector3.forward);
-                                  if (Physics.Raycast(ray, out hit))
-                                  {
-                                     // Debug.DrawLine(transform.position, hit.point, Color.red);
-                                      //transform.position = Vector3.MoveTowards(transform.position, hit.point , step );
-                                      if(hit.collider.tag == "Environment")
+                                      Vector3 fwd = transform.TransformDirection(Vector3.forward);
+                                      Ray ray = new Ray(transform.position, Vector3.forward);
+                                      if (Physics.Raycast(ray, out hit))
                                       {
-                                          float step = speed2 * Time.deltaTime;
-                                          //Instantiate(Effect, transform.position, transform.rotation);
-                                          Debug.DrawRay(transform.position, Vector3.forward);
-                                          //GameObject Clone = Instantiate(myObj, transform.position, transform.rotation) as GameObject;
-                                      }
-                                      */
+                                         // Debug.DrawLine(transform.position, hit.point, Color.red);
+                                          //transform.position = Vector3.MoveTowards(transform.position, hit.point , step );
+                                          if(hit.collider.tag == "Environment")
+                                          {
+                                              float step = speed2 * Time.deltaTime;
+                                              //Instantiate(Effect, transform.position, transform.rotation);
+                                              Debug.DrawRay(transform.position, Vector3.forward);
+                                              //GameObject Clone = Instantiate(myObj, transform.position, transform.rotation) as GameObject;
+                                          }
+                             */
                         }
-                                             
-                            myObj.transform.position += temp;
-                            lastFramesLocation = location;
-                        
+                        //        if(Math.Abs(location.z)   > .4)  
+
+                        //     {
+                        else 
+                          
+                        {
+                            myObj.GetComponent<CloningAndScoring>().Cloning(velocity);
+                          
+                        }
+                            //  }
                     }
 
                 }
