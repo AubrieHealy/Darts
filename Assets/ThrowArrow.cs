@@ -5,293 +5,367 @@ namespace RSUnityToolkit
 
 {
 
-
     public class ThrowArrow : MonoBehaviour
     {
-        private PXCMSenseManager session = null; //create sensemanager
-        private pxcmStatus sts; // sts for debug log
-        public GameObject myObj; // current game object
-        private PXCMPoint3DF32 lastFramesLocation; // to be filled with the first frames location
-        private Vector3 speed; // Updates the speed of the dart 
-        private float velocity;
-        RaycastHit hit;
-        private float FFTime;
-        private PXCMHandModule handAnalyzer;
-        private RigidbodyConstraints freeze;
+        enum ThrowState
+        {
+            OpenHandPrompt,
+            GrabDartPrompt,
+            ThrowDartPrompt,
+            InFlight,
+        }
+
+        private PXCMSenseManager mSenseManager = null; //create sensemanager
+        public GameObject DartPrefab; // current game object
+
+        private bool mReadyForDart = true;
       
-      // public Rigidbody CloneDart;
-        public int toThrow = 0;
+        private PXCMHandModule mHandModule;
+        private PXCMHandData mHandData;
 
-        // Use this for initialization
+        public Camera MainCamera;
+        public float RSScale = 1.0f;
+        private PXCMFaceModule faceAnalyzer;
+        private PXCMFaceData faceData;
 
+        private PXCMHandCursorModule mCursorModule;
+        private PXCMCursorData mCursorData;
 
+        private VelocityAverage mVelocityAverage = new VelocityAverage(15);
 
+        private bool mLastHandPositionAvailable;
+        private Vector3 mLastHandPosition;
 
+        public GameObject NearDart;
+        public GameObject FarDart;
+        public GameObject IdleDart;
+        public GameObject RightLimitDart;
+        public GameObject TopLimitDart;
+        public GameObject BottomLimitDart;
 
+        public float RealSenseNearZ = 0.33f;
+        public float RealSenseFarZ = 0.7f;
+        public float RealSenseFarRightX = 0.7f;
+        public float RealSenseTopY = 0.33f;
+        public float RealSenseBottomY = 0.7f;
+
+        public float ThrowMultiplier = 4.0f;
+
+        private Dart mCurrentDart;
+
+        private ThrowState mThrowState;
+
+        private HistoryTracker<int> mOpenessHistory = new HistoryTracker<int>(-1, 64);
+        private HistoryTracker<bool> mHandTracked = new HistoryTracker<bool>(false, 64);
+        private HistoryTracker<Vector3> mHandPositionRaw = new HistoryTracker<Vector3>(Vector3.zero, 64);
+        private HistoryTracker<Vector3> mDartPositionWorld = new HistoryTracker<Vector3>(Vector3.zero, 64);
+
+        private string mPromptText = "";
+
+        public float MinThrowSpeed = 6.0f;
+        public float MinThrowAngle = 15.0f;
 
 
         void Start()
         {
+            
+            pxcmStatus sts;
 
-           // Dart = GetComponent<Rigidbody>();
-            // Creates location data to compare current location
-            lastFramesLocation.x = 0;
-            lastFramesLocation.y = 0;
-            lastFramesLocation.z = 0;
+            mThrowState = ThrowState.OpenHandPrompt;
 
+            //PXCMSession session = PXCMSession.CreateInstance();
 
-            // to speed up dart movement 
-            speed = new Vector3(5, 5, 5);
-
-            // Creates an instance of the sense manager to be called later
-            session = PXCMSenseManager.CreateInstance();
-
-
-            //Output an error if there is no instance of the sense manager 
-            if (session == null)
+            //mSenseManager = session.CreateSenseManager();
+            mSenseManager = PXCMSenseManager.CreateInstance();
+            if (mSenseManager == null)
             {
                 Debug.LogError("SenseManager Init Failed!");
+                return;
             }
 
+            /*sts = mSenseManager.EnableHandCursor();
+            if (sts != pxcmStatus.PXCM_STATUS_NO_ERROR)
+            {
+                Debug.LogError("PXCSenseManager.EnableHandCursor: " + sts);
+                return;
+            }
+            mCursorModule = mSenseManager.QueryHandCursor();
+            mCursorData = mCursorModule.CreateOutput();*/
 
             // Enables hand tracking
-            sts = session.EnableHand();
-            handAnalyzer = session.QueryHand();
-
-
-
+            sts = mSenseManager.EnableHand();
             if (sts != pxcmStatus.PXCM_STATUS_NO_ERROR)
+            {
                 Debug.LogError("PXCSenseManager.EnableHand: " + sts);
+                return;
+            }
+            mHandModule = mSenseManager.QueryHand();
+            mHandData = mHandModule.CreateOutput();
 
-
-
-            // Creates the session 
-            sts = session.Init();
+            
+            sts = mSenseManager.Init();
             if (sts != pxcmStatus.PXCM_STATUS_NO_ERROR)
+            {
                 Debug.LogError("PXCSenseManager.Init: " + sts);
+                return;
+            }
+                       
 
+            // Creates a hand config for future data ... and face
+            PXCMHandConfiguration handconfig = mHandModule.CreateActiveConfiguration();
 
-
-            // Creates a hand config for future data 
-            PXCMHandConfiguration handconfig = handAnalyzer.CreateActiveConfiguration();
+            //handconfig.SetTrackingMode(PXCMHandData.TrackingModeType.TRACKING_MODE_CURSOR);
 
             //Smoothes hand tracking movement 
-            handconfig.SetSmoothingValue(10);
+            //handconfig.SetSmoothingValue(10);
 
             //Sets the tracking bounds of the screen
-            handconfig.SetTrackingBounds(-4, -14, 9, 7);
+            //handconfig.SetTrackingBounds(-4, -14, 9, 7);
 
 
-            //If there is handconfig instance
+            //If there is handcnGnfig instance
             if (handconfig != null)
             {
                 handconfig.EnableAllAlerts();
                 handconfig.ApplyChanges();
                 handconfig.Dispose();
             }
+            /*
+            if (faceconfig != null)
+            {
+                faceconfig.pose.isEnabled = true;
+                faceconfig.ApplyChanges();
+                faceconfig.Dispose();
+                faceData = faceAnalyzer.CreateOutput();
+            }
+            */
 
         }
+        
 
+        private void MCurrentDart_CollideEvent(Dart dart)
+        {
+            mReadyForDart = true;
+            mThrowState = ThrowState.OpenHandPrompt;
+        }
 
-
-
+        private void ResetDartIdle()
+        {
+            if (mCurrentDart != null)
+            {
+                mCurrentDart.transform.position = IdleDart.transform.position;
+                mCurrentDart.transform.rotation = IdleDart.transform.rotation;
+            }
+        }
 
         // Update is called once per frame
-        void FixedUpdate()
+        void Update()
         {
-
-
             // Checks is there is a sensemanager session 
-            if (session == null)
+            if (mSenseManager == null || mHandModule == null)
                 return;
 
-            // For accessing hand data
-            handAnalyzer = session.QueryHand();
+            int openness = -1;
 
-
-            // If there is a sense manager create an output for the hand data. 
-            if (handAnalyzer != null)
-            {
-                PXCMHandData handData = handAnalyzer.CreateOutput();
-                if (handData != null)
-                {
-                    handData.Update();
-
-                    PXCMHandData.IHand IHAND; // Ihand instance for accessing future data
-                    Int32 IhandData; // for QueryOpenness Value
-                    PXCMPoint3DF32 location; // Stores hand tracking position 
-
-                    //Fills IHAND with information to later be grabbed and used for tracking + openness 
-                    handData.QueryHandData(PXCMHandData.AccessOrderType.ACCESS_ORDER_NEAR_TO_FAR, 0, out IHAND);
-
-
-                    // If there is data in Ihand
-                    if (IHAND != null)
-                    {
-
-                        // Debug.DrawLine(transform.position, hit.point, Color.red);
-
-
-                        // Inits hand tracking from the center of the hand. 
-                        location = IHAND.QueryMassCenterWorld();
-
-
-
-                        //Locates the intitial frame and sets it's value to the current location. 
-                        if (lastFramesLocation.x == 0 && lastFramesLocation.y == 0 && lastFramesLocation.z == 0)
-                        {
-                            FFTime = Time.deltaTime;
-                            //  Debug.Log("Previous Frames Time: " + FFTime); 
-                            //first frame
-                            //   Debug.Log("LastFrameLocation: " + lastFramesLocation.z + "Current frame location: " + location.z); 
-                            lastFramesLocation = location;
-                            return;
-                        }
-
-
-
-                        Vector3 temp = new Vector3((lastFramesLocation.x - location.x) * speed.x, (lastFramesLocation.y - location.y) * -1 * speed.y, (lastFramesLocation.z - location.z) * speed.z);
-                        float Distance = (location.z - lastFramesLocation.z);
-                   //     Debug.Log("location: " + location.z); 
-
-                        velocity = Math.Abs(((Distance / .02f) * 60 ));
-                      // Debug.Log("Velocity: " + velocity);
-
-                        if (Math.Abs(lastFramesLocation.z - location.z) < 0.03)
-                        {
-
-                            velocity = 0;
-                          //  Debug.Log(Math.Abs(lastFramesLocation.z - location.z));
-                        }
-
-                        //   Debug.Log("Distance Traveled : " + Distance);
-
-
-                        
-
-
-
-
-
-
-                             IhandData = IHAND.QueryOpenness();
-                        //if (IhandData > 80)
-                        if (velocity < 100 && myObj.transform.position.z < -11)
-                        {
-
-                            freeze = RigidbodyConstraints.None;
-                            myObj.transform.position += temp;
-                            lastFramesLocation = location;
-
-                            //  Debug.Log("Velocity: " + velocity);
-
-
-                            //  freeze = RigidbodyConstraints.FreezePositionX | RigidbodyConstraints.FreezePositionY;
-
-
-                            /*
-                                                         if (toThrow < 1)
-                                                            {
-
-                                                                GameObject Clone = Instantiate(myObj, location, transform.rotation) as GameObject;
-                                                                //Physics.IgnoreCollision(Dart.GetComponent<Collider>(), Clone.GetComponent<Collider>());
-                                                                Rigidbody CloneDart = Clone.GetComponent<Rigidbody>();
-                                                                //CloneDart.GetComponent<Collider>();
-
-
-                                                                //Physics.IgnoreCollision(Dart.GetComponent<Collider>(), Clone.GetComponent<Collider>());
-                                                            //    toThrow = toThrow - 1;
-                                                                CloneDart.transform.position = myObj.transform.position;
-                                                                CloneDart.AddForce(transform.up * ((velocity * 90)));
-
-
-                                                               toThrow = toThrow + 1;
-
-
-                                                         }
-
-                                                  
-
-
-                                      Vector3 fwd = transform.TransformDirection(Vector3.forward);
-                                      Ray ray = new Ray(transform.position, Vector3.forward);
-                                      if (Physics.Raycast(ray, out hit))
-                                      {
-                                         // Debug.DrawLine(transform.position, hit.point, Color.red);
-                                          //transform.position = Vector3.MoveTowards(transform.position, hit.point , step );
-                                          if(hit.collider.tag == "Environment")
-                                          {
-                                              float step = speed2 * Time.deltaTime;
-                                              //Instantiate(Effect, transform.position, transform.rotation);
-                                              Debug.DrawRay(transform.position, Vector3.forward);
-                                              //GameObject Clone = Instantiate(myObj, transform.position, transform.rotation) as GameObject;
-                                          }
-                             */
-                        }
-                        //        if(Math.Abs(location.z)   > .4)  
-
-                        //     {
-                        else 
-                          
-                        {
-                            myObj.GetComponent<CloningAndScoring>().Cloning(velocity);
-                          
-                        }
-                            //  }
-                    }
-
-                }
-
-
-                handAnalyzer.Dispose();
-                session.ReleaseFrame();
-
-            }
-
-        }
-
-
-        /*
-        void Cloning()
-
-        {
-            //    new Vector3 ClonePos = Vector3(myObj.transform.position; )
-            if (toThrow < 1)
-            {
-
-                GameObject Clone = Instantiate(myObj, myObj.transform.position, transform.rotation) as GameObject;
-                Physics.IgnoreCollision(Dart.GetComponent<Collider>(), Clone.GetComponent<Collider>());
-                Rigidbody CloneDart = Clone.GetComponent<Rigidbody>();
-                
-                //CloneDart.GetComponent<Collider>();
-
-
-                //Physics.IgnoreCollision(Dart.GetComponent<Collider>(), Clone.GetComponent<Collider>());
-                //    toThrow = toThrow - 1;
-                CloneDart.transform.position = myObj.transform.position;
-                CloneDart.AddForce(transform.up * ((velocity * 90)));
-
-
-                toThrow = toThrow + 1;
-
-
-            }
-
-        }
-
-
-        void OnCollisionEnter(Collider other)
-        {
-            //Physics.IgnoreCollision(Dart.GetComponent<Collider>(), CloneDart.GetComponent<Collider>());
-            // Dart.velocity = Vector3.zero;
+            Vector3 headPosition = Vector3.zero;
+            Vector3 dartPosition = Vector3.zero;
             
-                Debug.Log("Tothrow: " + toThrow);
-            toThrow = toThrow - 1;  ;
-           
+            bool lastHandPositionAvailable = mLastHandPositionAvailable;
+
+            mLastHandPositionAvailable = false;
+
+            mHandData.Update();
+
+            PXCMHandData.IHand hand;
+            //PXCMCursorData.ICursor cursor;
+            PXCMPoint3DF32 location;
+            
+            //mCursorData.QueryCursorData(PXCMCursorData.AccessOrderType.ACCESS_ORDER_NEAR_TO_FAR, 0, out cursor);
+            mHandData.QueryHandData(PXCMHandData.AccessOrderType.ACCESS_ORDER_NEAR_TO_FAR, 0, out hand);
+            if (hand != null)
+            {
+                location = hand.QueryMassCenterWorld();
+                openness = hand.QueryOpenness();
+
+                dartPosition = new Vector3(location.x, location.y, location.z);
+                //Debug.LogFormat("dartPosition = {0}, {1}, {2}", dartPosition.x, dartPosition.y, dartPosition.z);
+
+                
+                
+            }
+            else
+            {
+                mVelocityAverage.Reset();
+            }
+            mSenseManager.ReleaseFrame();
+
+            mHandPositionRaw.Insert(dartPosition);
+            mHandTracked.Insert(hand != null);
+            mOpenessHistory.Insert(openness);
+
+            switch( mThrowState )
+            {
+                case ThrowState.OpenHandPrompt:
+                {
+                    mPromptText = "Open your hand";
+                        ResetDartIdle();
+                        bool open = mOpenessHistory.CheckCriteria(5, (value)=> value > 80);
+                    bool handTracked = mHandTracked.CheckCriteria(5, (value) => value );
+                    if( open && handTracked )
+                    {
+                        mThrowState = ThrowState.GrabDartPrompt;
+                    }
+                }
+                break;
+                case ThrowState.GrabDartPrompt:
+                    {
+                        mPromptText = "Close your hand to grab the dart";
+
+                        if( mCurrentDart == null )
+                        {
+                            mCurrentDart = Instantiate(DartPrefab).GetComponent<Dart>();
+                            mCurrentDart.transform.SetParent(transform);
+                            mCurrentDart.CollideEvent += MCurrentDart_CollideEvent;
+                        }
+                        ResetDartIdle();
+
+                        // if tracking has been missing for 10 frames
+                        if (mHandTracked.CheckCriteria(10, (value) => value == false))
+                        {
+                            mThrowState = ThrowState.OpenHandPrompt;
+                        }
+                        else
+                        {
+                            bool closed = mOpenessHistory.CheckCriteria(5, (value) => value < 60);
+                            if( closed )
+                            {
+                                mThrowState = ThrowState.ThrowDartPrompt;
+                            }
+                        }
+                        
+                    }
+                    break;
+                case ThrowState.ThrowDartPrompt:
+                    {
+                        DartThrowingLogic();
+                    }
+                    break;
+                case ThrowState.InFlight:
+                    {
+                        mPromptText = "Dart In Flight";
+                    }
+                    break;
+                default: break;
+            }
+
+            if( mCurrentDart )
+                mDartPositionWorld.Insert(mCurrentDart.transform.position);
+
+        }
+
+        float LerpNoClamp( float a, float b, float ratio )
+        {
+            return a + (b - a) * ratio;
+        }
+
+        Vector3 RawHandPositionToWorld( Vector3 pos )
+        {
+            float scale = Mathf.Abs((FarDart.transform.position.z - NearDart.transform.position.z) / (RealSenseFarZ - RealSenseNearZ));
+            float ratioX = Math.Min(1.0f, Math.Max(-1.0f, pos.x / RealSenseFarRightX));
+            float ratioY = Math.Min(1.0f, Math.Max(0.0f, (pos.y - RealSenseTopY) / (RealSenseBottomY - RealSenseTopY)));
+            float ratioZ = Math.Min(1.0f, Math.Max(0.0f, (pos.z - RealSenseNearZ) / (RealSenseFarZ - RealSenseNearZ)));
+
+            float newZ = Mathf.Lerp(FarDart.transform.position.z, NearDart.transform.position.z, ratioZ);
+            float newY = LerpNoClamp(TopLimitDart.transform.position.y, BottomLimitDart.transform.position.y, ratioY);
+            float newX = LerpNoClamp(transform.position.x, RightLimitDart.transform.position.x, ratioX);
+
+            Vector3 handPositionWorld = new Vector3(newX, newY, newZ);
+            return handPositionWorld;
+        }
+
+        void DartThrowingLogic( )
+        {
+            mPromptText = "Throw the dart!";
+
+            if( mHandTracked.CheckCriteria(32, (value) => value == false ) )
+            {
+                Debug.Log("hand tracking lost for 32 frames");
+                mThrowState = ThrowState.OpenHandPrompt;
+                return;
+            }
+            if (!mHandTracked.CheckCriteria(2, (value) => value == true))
+            {
+                Debug.Log("hand tracking unavailable");
+                return;
+            }
+
+            Vector3 handPositionWorld = RawHandPositionToWorld(mHandPositionRaw[0]);
+
+            Vector3 dartCurPosition = mCurrentDart.transform.position;
+            Vector3 dartNewPosition = Vector3.Lerp(dartCurPosition, handPositionWorld, 0.1f);
+            dartNewPosition.z = Mathf.Lerp(dartCurPosition.z, handPositionWorld.z, 0.4f);
+
+            Vector3 camPos = MainCamera.transform.position;
+            camPos.x = dartNewPosition.x;
+            camPos.y = dartNewPosition.y + 0.05f;
+            MainCamera.transform.position = camPos;
+
+            //Vector3 throwPosition = 
+            //dartPosition = new Vector3(dartPosition.x * scale, dartPosition.y * scale, newZ);
+
+            /*if (lastHandPositionAvailable)
+            {
+                Vector3 delta = dartPositionWorld - mLastHandPosition;
+                mVelocityAverage.AddValue(delta / Time.deltaTime);
+            }*/
+            mLastHandPosition = dartNewPosition;
+            mLastHandPositionAvailable = true;
+
+            mCurrentDart.transform.position = dartNewPosition;
+            mCurrentDart.transform.rotation = FarDart.transform.rotation;
+
+            if( mOpenessHistory.CheckCriteria( 2, (value)=> value > 80 ) && mDartPositionWorld.Count > 4)
+            {
+                Vector3 dir = Vector3.Normalize(FarDart.transform.position - NearDart.transform.position);
+                Vector3 velocity = (mDartPositionWorld[0] - mDartPositionWorld[4]) / (Time.deltaTime * 4);
+                velocity.x = 0;
+                velocity *= ThrowMultiplier;
+
+                float angle = Vector3.Angle(dir, velocity.normalized);
+              //  Debug.LogFormat("Angle Between: {0}", angle);
+             //   Debug.LogFormat("Velocity: {0}, {1}, {2}, Speed: {3}", velocity.x, velocity.y, velocity.z, velocity.magnitude);
+                if (angle <MinThrowAngle && velocity.magnitude > MinThrowSpeed)
+                {
+                    mCurrentDart.SetThrow(velocity);
+                    mCurrentDart = null;
+                    mThrowState = ThrowState.InFlight;
+                }
+            }
+            /*if ( mOpenness > 95)
+            {
+                Vector3 dir = (FarDart.transform.position - NearDart.transform.position);
+                Vector3 avgVelocity = mVelocityAverage.GetHighestAvgVelocity(4, dir);
+                //Vector3 worldVelcoity = RSCamera.transform.TransformVector(avgVelocity);
+                mCurrentDart.SetThrow(avgVelocity * ThrowMultiplier);
+                mCurrentDart = null;
+            }*/
+        }
+
+        void OnGUI()
+        {
+
+
+            //GUI.Label(new Rect(10, 10, 100, 20), mVelocityAverage.GetAverage().ToString());
+            GUI.Label(new Rect(10, 10, 100, 20), mPromptText);// mVelocityAverage.GetAverage().ToString());
+            GUI.Label(new Rect(10, 30, 100, 20), mHandPositionRaw[0].ToString());// string.Format("openness {0}", mOpenessHistory[0]));// mVelocityAverage.GetAverage().ToString());
 
 
         }
-        */ 
-    
+        void OnCollisionEnter(Collision col)
+        {
+            Debug.Log("Collided"); 
+        }
+        
     }
+
 }

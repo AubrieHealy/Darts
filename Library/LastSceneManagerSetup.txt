@@ -1,4 +1,0 @@
-sceneSetups:
-- path: Assets/Darts/Dart_Setup.unity
-  isLoaded: 1
-  isActive: 1
