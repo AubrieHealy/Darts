@@ -19,7 +19,8 @@ namespace RSUnityToolkit
         public GameObject DartPrefab; // current game object
 
         private bool mReadyForDart = true;
-      
+        public GUIStyle style;
+
         private PXCMHandModule mHandModule;
         private PXCMHandData mHandData;
 
@@ -356,8 +357,8 @@ namespace RSUnityToolkit
 
 
             //GUI.Label(new Rect(10, 10, 100, 20), mVelocityAverage.GetAverage().ToString());
-            GUI.Label(new Rect(10, 10, 100, 20), mPromptText);// mVelocityAverage.GetAverage().ToString());
-            GUI.Label(new Rect(10, 30, 100, 20), mHandPositionRaw[0].ToString());// string.Format("openness {0}", mOpenessHistory[0]));// mVelocityAverage.GetAverage().ToString());
+            GUI.Label(new Rect(10, 10, 100, 20), mPromptText, style);// mVelocityAverage.GetAverage().ToString());
+            GUI.Label(new Rect(10, 30, 100, 20), mHandPositionRaw[0].ToString(), style);// string.Format("openness {0}", mOpenessHistory[0]));// mVelocityAverage.GetAverage().ToString());
 
 
         }
